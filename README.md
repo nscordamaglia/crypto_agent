@@ -93,6 +93,27 @@ python bot.py
 ```
 *Tip: Para dejar el bot corriendo en el fondo: presiona la combinación `Ctrl + b` y suelta, luego presiona la letra `d`. Para recuperar la consola visualmente horas después: escribe `tmux attach -t bot`.*
 
+
+---
+
+## 💻 Desarrollo y Sincronización (WSL -> TV Box) (Recomendado)
+
+Si estás desarrollando desde **Windows (WSL/Ubuntu)**, la forma más estable de enviar tus cambios al TV Box sin desconexiones es usando `rsync`.
+
+### 1. Preparación
+Asegúrate de tener `rsync` en ambos lados:
+- **WSL:** Ya viene instalado por defecto.
+- **Termux:** Ejecuta `pkg install rsync -y`.
+
+### 2. Comando de Sincronización
+Ejecuta el siguiente comando desde la carpeta raíz del proyecto en WSL:
+
+```bash
+rsync -avz -e "ssh -p 8022" ./ u0_a61@192.168.0.24:/data/data/com.termux/files/home/crypto_agent/ --exclude '.git'
+```
+
+> **Tip:** El flag `--exclude '.git'` evita que se suba toda la carpeta de historial de Git, haciendo que la transferencia sea casi instantánea.
+
 ---
 
 ## 🚀 Setup Rápido (Local / PC)
@@ -122,6 +143,10 @@ DISCORD_TOKEN=tu_token_de_discord
 BINANCE_API_KEY=tu_api_key_testnet
 BINANCE_SECRET=tu_secret_testnet
 BINANCE_TESTNET=True
+
+# Seguridad (Opcional pero recomendado)
+BINANCE_USE_RSA=False
+BINANCE_PRIVATE_KEY_PATH=./private_key.pem
 ```
 
 ### 3. Ejecutar
@@ -132,13 +157,24 @@ python bot.py
 
 ---
 
-## 🔑 Obtener credenciales Binance Testnet
+## 🔑 Obtener credenciales Binance Testnet (HMAC vs RSA)
 
+Binance ofrece dos formas de autenticar tu bot. El bot soporta ambas:
+
+### Opción A: HMAC (Rápida y por defecto)
 1. Ir a [testnet.binancefuture.com](https://testnet.binancefuture.com)
-2. Crear cuenta con GitHub
-3. **API Management** → **Create API**
-4. Copiar `API Key` y `Secret Key`
-5. El saldo testnet es virtual (de ejemplo: 10,000 USDT)
+2. **API Management** → **Create API**
+3. Copiar `API Key` y `Secret Key` en tu `.env`.
+4. Deja `BINANCE_USE_RSA=False`.
+
+### Opción B: RSA (Máxima Seguridad - Recomendada)
+Este método es más seguro porque Binance nunca conoce tu "secreto", solo tu llave pública.
+1. Genera un par de llaves RSA (privada y pública).
+2. Sube la **Llave Pública** (.pub) a Binance API Management.
+3. Configura en tu `.env`:
+   - `BINANCE_USE_RSA=True`
+   - `BINANCE_PRIVATE_KEY_PATH=ruta/a/tu/llave_privada.pem`
+4. Borra (o deja vacío) `BINANCE_SECRET`.
 
 ---
 
@@ -243,8 +279,23 @@ crypto_agent/
 ├── Procfile          # Pautas para Railway: "worker: python bot.py"
 ├── .env.example      # Archivo para basar las variables de entorno
 ├── .gitignore        # Excluye .env, cache y carpetas bin/venv
+├── deploy.sh         # Script de sincronización WSL -> TV Box (Rsync)
 └── README.md         # Documentación y Setup
 ```
+
+---
+
+## 🛠️ Troubleshooting (Solución de Problemas)
+
+### Error: "Transport endpoint is not connected"
+Este error ocurre si alguna vez intentaste usar un montaje SSHFS y la conexión se rompió. La terminal queda bloqueada intentando acceder a una carpeta fantasma.
+**Solución:**
+1. Sal de cualquier carpeta de proyecto: `cd ~`
+2. Limpia el montaje zombi:
+   ```bash
+   sudo umount -l /home/rustycius/portal_tvbox
+   ```
+3. Vuelve a tu carpeta de proyecto y el comando de `rsync` funcionará normalmente.
 
 ---
 

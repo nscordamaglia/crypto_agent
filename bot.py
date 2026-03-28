@@ -358,11 +358,18 @@ async def start_bot(ctx):
 
     if not state.client:
         try:
-            state.client = await AsyncClient.create(
-                api_key=config.BINANCE_API_KEY,
-                api_secret=config.BINANCE_SECRET,
-                testnet=config.TESTNET,
-            )
+            if config.BINANCE_USE_RSA:
+                state.client = await AsyncClient.create(
+                    api_key=config.BINANCE_API_KEY,
+                    private_key=config.BINANCE_PRIVATE_KEY_PATH,
+                    testnet=config.TESTNET,
+                )
+            else:
+                state.client = await AsyncClient.create(
+                    api_key=config.BINANCE_API_KEY,
+                    api_secret=config.BINANCE_SECRET,
+                    testnet=config.TESTNET,
+                )
         except Exception as e:
             await ctx.send(f"❌ Error conectando a Binance: {e}")
             return
