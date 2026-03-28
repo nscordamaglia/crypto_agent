@@ -1,6 +1,6 @@
-# 🤖 Discord Trading Bot — Binance Futures Testnet + Railway
+# 🤖 Discord Trading Bot — Binance Futures Testnet en TV Box Android
 
-Bot de scalping automático en Python para Binance Futures Testnet, con alertas y comandos vía Discord. Desplegable en Railway.app con costo $0 inicial.
+Bot de scalping automático en Python para Binance Futures Testnet, con alertas y comandos vía Discord. Diseñado para correr 24/7 de forma grauita en un **TV Box Android (Termux)** como mini-servidor de bajísimo consumo eléctrico. También incluye instrucciones como alternativa para plataformas en la nube como **Railway.app**.
 
 ---
 
@@ -22,13 +22,88 @@ Bot de scalping automático en Python para Binance Futures Testnet, con alertas 
 
 ---
 
-## 🚀 Setup Local
+## 📱 Deploy Principal: Mini Servidor 24/7 (TV Box Android)
+
+¡Puedes usar tu TV Box como un mini-servidor 24/7 de bajísimo consumo eléctrico para correr este bot de forma nativa!
+
+### 1. Preparar Android
+1. Abre **Termux** y ejecuta `termux-wake-lock` (esto asegura que la CPU del TV Box no se suspenda aunque se apague la pantalla).
+2. Ve a los **Ajustes de tu TV Box > Aplicaciones > Termux > Batería** y selecciona "Sin restricciones" o "No optimizar".
+
+### 2. Instalar el entorno de Termux Nativo
+A diferencia de las distribuciones Linux emuladas (como Ubuntu o Debian) que tienen problemas de permisos, el **Termux nativo** tiene acceso libre al hardware criptográfico de Android, por lo que **evitarás por completo los letales errores de `SSL` o `PRNG is not seeded`**.
+
+```bash
+# 1. Actualizar e instalar el repositorio científico (Tur-Repo)
+pkg update && pkg upgrade -y
+pkg install tur-repo -y
+
+# 2. Instalar Python, tmux, git y las versiones pre-compiladas de Pandas/Numpy
+pkg install python git tmux python-pandas python-numpy -y
+```
+
+### 3. Traer credenciales SSH y Clonar
+Para clonar repositorios privados (sin teclear contraseñas) usa tu certificado SSH:
+
+**Opción A: Pegar tu llave (Recomendada y más fácil)**
+```bash
+mkdir -p ~/.ssh
+nano ~/.ssh/id_ed25519   # O usa id_rsa dependiento de tu llave
+```
+Pega el texto de tu llave privada adentro, guarda (`Ctrl+O`, `Enter`) y ajusta sus permisos de seguridad obligatoria:
+```bash
+chmod 600 ~/.ssh/id_ed25519
+ssh-keyscan github.com >> ~/.ssh/known_hosts
+```
+
+**Opción B: Transferir por SCP** (Desde tu PC al TV Box por red local)
+```bash
+scp -P 8022 ~/.ssh/id_ed25519 tu_usuario@IP_DEL_TVBOX:~/.ssh/
+```
+
+**Finalmente, clona el repositorio:**
+```bash
+git clone git@github.com:nscordamaglia/crypto_agent.git
+cd crypto_agent
+```
+
+### 4. Setup del Bot
+
+Como Termux funciona de por sí como un "contenedor" blindado frente al resto de Android, **crear un entorno virtual adentro (venv) es redundante y puedes instalar globalmente directamente**. 
+
+Además, dado que Termux instaló su propia versión hiper-optimizada de Pandas (`tur-repo`), debemos quitarle la cadena estricta de versión a tu archivo para que _pip_ no intente compilar uno viejo sobreescribiéndolo:
+
+```bash
+# Quitar versión estricta de pandas en el archivo
+sed -i 's/pandas==2.2.1/pandas/g' requirements.txt
+
+# Instalar dependencias globalmente
+pip install -r requirements.txt --break-system-packages
+
+# Configurar variables usando el ejemplo
+cp .env.example .env
+nano .env  # Edita este archivo agregándole tus tokens de Binance y Discord
+```
+
+### 5. Mantener el bot 24/7 con Tmux
+
+```bash
+tmux new -s bot
+python bot.py
+```
+*Tip: Para dejar el bot corriendo en el fondo: presiona la combinación `Ctrl + b` y suelta, luego presiona la letra `d`. Para recuperar la consola visualmente horas después: escribe `tmux attach -t bot`.*
+
+---
+
+## 🚀 Setup Rápido (Local / PC)
+
+Si solo quieres probar el bot en tu computadora personal:
 
 ### 1. Clonar y preparar entorno
 
 ```bash
-git clone <tu-repo>
-cd railway_bot
+git clone git@github.com:nscordamaglia/crypto_agent.git
+cd crypto_agent
 python -m venv .venv
 source .venv/bin/activate        # Linux/Mac
 # .venv\Scripts\activate         # Windows
@@ -41,7 +116,7 @@ pip install -r requirements.txt
 cp .env.example .env
 ```
 
-Edita `.env`:
+Edita `.env` con tus tokens:
 ```env
 DISCORD_TOKEN=tu_token_de_discord
 BINANCE_API_KEY=tu_api_key_testnet
@@ -91,27 +166,30 @@ python bot.py
 
 ---
 
-## 🚂 Deploy en Railway.app
+## 🚂 Deploy Alternativo: Nube (Railway.app)
+
+Como alternativa al local y al TV Box, puedes subir el bot a un servicio en la nube como Railway.
 
 ### Paso 1 — Subir código a GitHub
 
+Opcional si usas tu propio fork:
 ```bash
 git init
 git add .
-git commit -m "feat: trading bot inicial"
-git remote add origin https://github.com/tuusuario/tu-repo.git
+git commit -m "feat: trading bot continuo"
+git remote add origin git@github.com:nscordamaglia/crypto_agent.git
 git push -u origin main
 ```
 
 ### Paso 2 — Crear proyecto en Railway
 
-1. Ir a [railway.app](https://railway.app) y loguear con GitHub
-2. **New Project → Deploy from GitHub repo**
-3. Seleccionar tu repositorio
+1. Ir a [railway.app](https://railway.app) y loguearte con GitHub.
+2. Hacer clic en **New Project → Deploy from GitHub repo**.
+3. Seleccionar tu repositorio `crypto_agent`.
 
 ### Paso 3 — Configurar Variables de Entorno
 
-En el dashboard de Railway → **Variables**:
+En el dashboard de Railway ve a la sección **Variables** y agrega:
 
 ```
 DISCORD_TOKEN       = tu_token_discord
@@ -122,81 +200,24 @@ BINANCE_TESTNET     = True
 
 ### Paso 4 — Verificar Procfile
 
-Railway detecta el `Procfile` automáticamente:
+Railway detecta el archivo `Procfile` de la raíz automáticamente:
 ```
 worker: python bot.py
 ```
 
-> ⚠️ Asegúrate de que el servicio esté configurado como **Worker** (no Web) en Railway para evitar cobros por puerto HTTP abierto.
+> ⚠️ Asegúrate de que el servicio esté configurado internamente como **Worker** (y no como servicio Web) en la configuración de Railway para evitar cobros innecesarios por dejar un puerto HTTP expuesto.
 
 ### Paso 5 — Deploy
 
-Railway hace el deploy automáticamente al hacer push a `main`. El bot arrancará como proceso background.
-
----
-
-## 📱 Deploy Nivel Servidor en TV Box Android (Termux)
-
-¡Puedes usar tu TV Box como un mini-servidor 24/7 de bajísimo consumo!
-
-### 1. Preparar Android
-1. Abre **Termux** y ejecuta `termux-wake-lock` (esto asegura que la CPU no se suspenda).
-2. Ve a los **Ajustes de tu TV Box > Aplicaciones > Termux > Batería** y selecciona "Sin restricciones" o "No optimizar".
-
-### 2. Crear entorno Linux (Ubuntu)
-Usaremos `proot-distro` para evitar errores al compilar dependencias pesadas como `pandas` en ARM nativo:
-
-```bash
-pkg update && pkg upgrade -y
-pkg install proot-distro -y
-proot-distro install ubuntu
-proot-distro login ubuntu
-```
-
-### 3. Setup dentro del Ubuntu virtualizado
-
-```bash
-apt update && apt upgrade -y
-apt install python3 python3-pip python3-venv git tmux -y
-git clone <tu-repo>
-cd railway_bot
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
-cp .env.example .env
-# Edita tu archivo .env con nano o vi
-```
-
-### 4. Mantener el bot 24/7 con Tmux
-
-```bash
-tmux new -s bot
-python3 bot.py
-```
-*Para dejar el bot en segundo plano, presiona `Ctrl + b` y luego `d`. Para recuperar la consola después, usa `tmux attach -t bot` dentro de Ubuntu.*
-
-### 🛠️ Solución a errores comunes (Troubleshooting)
-
-**Error al instalar paquetes:** `Failed to take /etc/passwd lock: Invalid argument`
-- **Causa:** Las restricciones de seguridad del kernel de Android impiden que `systemd` administre los usuarios.
-- **Solución (ejecutar dentro del entorno Ubuntu):**
-```bash
-# 1. Engañar al sistema para que ignore el bloqueo
-mv /usr/bin/systemd-sysusers /usr/bin/systemd-sysusers.bak
-ln -s /usr/bin/true /usr/bin/systemd-sysusers
-
-# 2. Terminar la instalación que quedó pendiente
-dpkg --configure -a
-apt update && apt upgrade -y
-```
+Railway hará el deploy del código automáticamente cada vez que hagas un push a la rama `main`, y el bot arrancará como proceso contínuo en el background.
 
 ---
 
 ## 🐘 PostgreSQL (Opcional — historial de trades)
 
 1. En Railway: **New → Database → PostgreSQL**
-2. Railway agrega automáticamente `DATABASE_URL` a las variables
-3. Puedes usar `asyncpg` o `psycopg2` para guardar `state.trade_history` en una tabla `trades`
+2. Railway agrega automáticamente `DATABASE_URL` a las variables.
+3. Puedes usar librerías como `asyncpg` o `psycopg2` para guardar la variable `state.trade_history` en una tabla llamada `trades`.
 
 ```sql
 CREATE TABLE trades (
@@ -215,19 +236,19 @@ CREATE TABLE trades (
 ## 📁 Estructura de Archivos
 
 ```
-railway_bot/
-├── bot.py            # Main: Discord bot + trading loop
-├── config.py         # Parámetros (SL, TP, RSI, leverage, etc.)
-├── requirements.txt  # Dependencias Python
-├── Procfile          # Railway: worker: python bot.py
-├── .env.example      # Template de variables de entorno
-├── .gitignore        # Excluye .env y cache
-└── README.md         # Este archivo
+crypto_agent/
+├── bot.py            # Main: Discord bot + loop de trading
+├── config.py         # Parámetros técnicos (SL, TP, RSI, leverage, etc.)
+├── requirements.txt  # Dependencias de Python
+├── Procfile          # Pautas para Railway: "worker: python bot.py"
+├── .env.example      # Archivo para basar las variables de entorno
+├── .gitignore        # Excluye .env, cache y carpetas bin/venv
+└── README.md         # Documentación y Setup
 ```
 
 ---
 
 ## ⚠️ Disclaimer
 
-Este bot opera en **testnet** por defecto. Para mainnet, setear `BINANCE_TESTNET=False`.  
-El trading de futuros con apalancamiento involucra riesgo de pérdida total del capital. Usar bajo su propia responsabilidad.
+Este bot opera transacciones de derivados en **Testnet** (entorno de pruebas) por defecto. Para usarlo con dinero real, setear la variable de entorno a `BINANCE_TESTNET=False`.  
+Pese a ser un bot educativo, el trading automático de criptomonedas y futuros con apalancamiento es altamente riesgoso y puede llevar a la pérdida de tu capital completo en minutos. Utilizar la versión en Mainnet **estritamente bajo su propia responsabilidad**.
