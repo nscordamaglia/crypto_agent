@@ -9,6 +9,7 @@ BINANCE_SECRET = os.getenv('BINANCE_SECRET')
 BINANCE_USE_RSA = os.getenv('BINANCE_USE_RSA', 'False').lower() == 'true'
 BINANCE_PRIVATE_KEY_PATH = os.getenv('BINANCE_PRIVATE_KEY_PATH', './private_key.pem')
 DISCORD_TOKEN = os.getenv('DISCORD_TOKEN')
+DISCORD_APPLICATION_ID = os.getenv('DISCORD_APPLICATION_ID')
 TESTNET = os.getenv('BINANCE_TESTNET', 'True').lower() == 'true'
 
 # Trading Parameters

@@ -22,6 +22,18 @@ Bot de scalping automático en Python para Binance Futures Testnet, con alertas 
 
 ---
 
+## 📦 Dependencias (requirements.txt)
+
+- `discord.py==2.3.2`
+- `python-binance==1.0.19`
+- `python-dotenv==1.0.1`
+- `aiohttp==3.9.3`
+
+### ⚙️ Librería de Sistema (Obligatoria)
+- **`numpy`**: Debe instalarse a través del gestor de paquetes del sistema (`pkg install python-numpy` en Termux o `apt install` en Linux) para asegurar compatibilidad binaria y rendimiento.
+
+---
+
 ## 📱 Deploy Principal: Mini Servidor 24/7 (TV Box Android)
 
 ¡Puedes usar tu TV Box como un mini-servidor 24/7 de bajísimo consumo eléctrico para correr este bot de forma nativa!
@@ -38,8 +50,9 @@ A diferencia de las distribuciones Linux emuladas (como Ubuntu o Debian) que tie
 pkg update && pkg upgrade -y
 pkg install tur-repo -y
 
-# 2. Instalar Python, tmux, git y las versiones pre-compiladas de Pandas/Numpy
-pkg install python git tmux python-pandas python-numpy -y
+# 2. Instalar Python, tmux, git y la versión pre-compilada de Numpy
+# Nota: Ya NO usamos pandas ni ta-lib para ser ultra-ligeros.
+pkg install python git tmux python-numpy -y
 ```
 
 ### 3. Traer credenciales SSH y Clonar
@@ -67,22 +80,34 @@ git clone git@github.com:nscordamaglia/crypto_agent.git
 cd crypto_agent
 ```
 
-### 4. Setup del Bot
+### 4. Setup del Bot (Gestión de Dependencias)
 
-Como Termux funciona de por sí como un "contenedor" blindado frente al resto de Android, **crear un entorno virtual adentro (venv) es redundante y puedes instalar globalmente directamente**. 
+⚠️ **IMPORTANTE:** Hemos removido `pandas` de `requirements.txt` para evitar conflictos de binarios en Android/Termux. Dependiendo de dónde corras el bot, la instalación varía:
 
-Además, dado que Termux instaló su propia versión hiper-optimizada de Pandas (`tur-repo`), debemos quitarle la cadena estricta de versión a tu archivo para que _pip_ no intente compilar uno viejo sobreescribiéndolo:
-
+#### Escenario A: TV Box (Termux Nativo)
+En Android no uses `pip` para librerías pesadas. El bot ahora usa **NumPy puro** para que sea ultra-rápido:
 ```bash
-# Quitar versión estricta de pandas en el archivo
-sed -i 's/pandas==2.2.1/pandas/g' requirements.txt
+# 1. Instalar NumPy desde el sistema (TUR)
+pkg install python-numpy -y
 
-# Instalar dependencias globalmente
+# 2. Instalar el resto de dependencias ligeras (discord.py, binance, etc.)
 pip install -r requirements.txt --break-system-packages
+```
 
-# Configurar variables usando el ejemplo
+#### Escenario B: Linux / WSL / Railway / PC
+En sistemas convencionales:
+```bash
+# 1. Activar venv (opcional)
+python -m venv .venv && source .venv/bin/activate
+
+# 2. Instalar dependencias
+pip install -r requirements.txt
+```
+
+#### 5. Configurar Variables de Entorno
+```bash
 cp .env.example .env
-nano .env  # Edita este archivo agregándole tus tokens de Binance y Discord
+nano .env  # Agrega tus tokens de Binance y Discord
 ```
 
 ### 5. Mantener el bot 24/7 con Tmux
@@ -109,7 +134,7 @@ Asegúrate de tener `rsync` en ambos lados:
 Ejecuta el siguiente comando desde la carpeta raíz del proyecto en WSL:
 
 ```bash
-rsync -avz -e "ssh -p 8022" ./ u0_a61@192.168.0.24:/data/data/com.termux/files/home/crypto_agent/ --exclude '.git'
+rsync -avz -e "ssh -p 8022" ./ TU_USUARIO@IP_DEL_TVBOX:/data/data/com.termux/files/home/crypto_agent/ --exclude '.git' --exclude '.venv'
 ```
 
 > **Tip:** El flag `--exclude '.git'` evita que se suba toda la carpeta de historial de Git, haciendo que la transferencia sea casi instantánea.
@@ -140,6 +165,7 @@ cp .env.example .env
 Edita `.env` con tus tokens:
 ```env
 DISCORD_TOKEN=tu_token_de_discord
+DISCORD_APPLICATION_ID=tu_application_id
 BINANCE_API_KEY=tu_api_key_testnet
 BINANCE_SECRET=tu_secret_testnet
 BINANCE_TESTNET=True
@@ -178,15 +204,28 @@ Este método es más seguro porque Binance nunca conoce tu "secreto", solo tu ll
 
 ---
 
-## 🤖 Crear Bot en Discord
+## 🤖 Configuración del Bot en Discord
 
-1. Ir a [discord.com/developers/applications](https://discord.com/developers/applications)
-2. **New Application** → darle nombre
-3. **Bot** → **Add Bot** → copiar el **Token**
-4. **OAuth2 → URL Generator**:
-   - Scope: `bot`
-   - Permissions: `Send Messages`, `Read Message History`, `Embed Links`
-5. Abrir la URL generada e invitar el bot a tu servidor
+Para que el bot funcione, necesitas tener un **Servidor de Discord** propio (puedes crear uno gratis en el signo `+` de tu lista de servidores).
+
+### 1. Obtener el Token (Paso Crítico)
+1. Ve al [Discord Developer Portal](https://discord.com/developers/applications).
+2. Selecciona tu Aplicación -> **Bot** (menú lateral).
+3. Busca la sección **Token** y dale al botón **Reset Token**. 
+   *   *Nota: No confundir con la 'Public Key' de la pestaña General. El Token es el que permite al bot iniciar sesión.*
+4. Copia el token generado y pégalo en tu `.env`.
+
+### 2. Activar Permisos Especiales (Intents)
+Sin esto, el bot no podrá leer tus comandos:
+1. En la misma pestaña **Bot**, baja hasta **Privileged Gateway Intents**.
+2. **Activa el interruptor "MESSAGE CONTENT INTENT"**.
+3. Dale a **Save Changes**.
+
+### 3. Invitar el Bot a tu Servidor
+1. Ve a **OAuth2** → **URL Generator**.
+2. Scopes: Selecciona `bot`.
+3. Bot Permissions: Selecciona `Send Messages`, `Embed Links`, `Read Message History`.
+4. Copia la URL generada, ábrela en tu navegador e invita al bot a tu servidor.
 
 ---
 

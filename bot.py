@@ -11,8 +11,7 @@ from typing import Optional
 
 import discord
 from discord.ext import commands, tasks
-import pandas as pd
-import ta as ta_lib
+import numpy as np
 from binance import AsyncClient, BinanceSocketManager
 from binance.enums import (
     FUTURE_ORDER_TYPE_MARKET,
@@ -73,50 +72,79 @@ async def log_discord(msg: str, embed: Optional[discord.Embed] = None):
         except Exception as e:
             logger.warning(f"No se pudo enviar a Discord: {e}")
 
-# ─── Análisis Técnico ─────────────────────────────────────────────────────────
+# ─── Análisis Técnico (Pure NumPy) ────────────────────────────────────────────
 
-async def fetch_klines(symbol: str, limit: int = 100) -> Optional[pd.DataFrame]:
-    """Trae velas 1m de Binance Futures. Retorna DataFrame con OHLCV."""
+def compute_ema(data: np.ndarray, window: int) -> np.ndarray:
+    """Calcula EMA usando NumPy."""
+    if len(data) < window:
+        return np.zeros_like(data)
+    alpha = 2 / (window + 1.0)
+    ema = np.zeros_like(data)
+    ema[window - 1] = np.mean(data[:window])
+    for i in range(window, len(data)):
+        ema[i] = data[i] * alpha + ema[i - 1] * (1 - alpha)
+    return ema
+
+def compute_rsi(data: np.ndarray, window: int = 14) -> np.ndarray:
+    """Calcula RSI usando suavizado de Wilder (NumPy)."""
+    if len(data) <= window:
+        return np.zeros_like(data)
+    
+    diff = np.diff(data)
+    gain = np.where(diff > 0, diff, 0.0)
+    loss = np.where(diff < 0, -diff, 0.0)
+    
+    avg_gain = np.zeros_like(data)
+    avg_loss = np.zeros_like(data)
+    
+    avg_gain[window] = np.mean(gain[:window])
+    avg_loss[window] = np.mean(loss[:window])
+    
+    for i in range(window + 1, len(data)):
+        avg_gain[i] = (avg_gain[i - 1] * (window - 1) + gain[i - 1]) / window
+        avg_loss[i] = (avg_loss[i - 1] * (window - 1) + loss[i - 1]) / window
+        
+    rs = np.divide(avg_gain, avg_loss, out=np.zeros_like(avg_gain), where=avg_loss != 0)
+    rsi = 100 - (100 / (1 + rs))
+    return rsi
+
+async def fetch_klines(symbol: str, limit: int = 100) -> Optional[dict]:
+    """Trae velas 1m de Binance Futures. Retorna dict con arrays de NumPy."""
     try:
         raw = await state.client.futures_klines(
             symbol=symbol,
             interval=KLINE_INTERVAL_1MINUTE,
             limit=limit,
         )
-        df = pd.DataFrame(raw, columns=[
-            "open_time", "open", "high", "low", "close", "volume",
-            "close_time", "quote_volume", "trades",
-            "taker_base", "taker_quote", "ignore",
-        ])
-        df["close"] = df["close"].astype(float)
-        df["open"]  = df["open"].astype(float)
-        df["high"]  = df["high"].astype(float)
-        df["low"]   = df["low"].astype(float)
-        return df
+        # Extraemos solo lo necesario para ahorrar memoria en Termux
+        closes = np.array([float(k[4]) for k in raw])
+        return {"close": closes}
     except BinanceAPIException as e:
         logger.error(f"fetch_klines {symbol}: {e}")
         return None
 
-def compute_signals(df: pd.DataFrame) -> dict:
+def compute_signals(data_dict: dict) -> dict:
     """
-    Calcula RSI(14), EMA5, EMA20.
+    Calcula RSI(14), EMA5, EMA20 usando NumPy.
     Retorna dict con valores y señal: 'BUY' | 'SELL' | None
     """
-    df["rsi"]  = ta_lib.momentum.RSIIndicator(df["close"], window=config.RSI_PERIOD).rsi()
-    df["ema5"] = ta_lib.trend.EMAIndicator(df["close"], window=config.EMA_FAST).ema_indicator()
-    df["ema20"]= ta_lib.trend.EMAIndicator(df["close"], window=config.EMA_SLOW).ema_indicator()
+    closes = data_dict["close"]
+    
+    rsi_arr  = compute_rsi(closes, window=config.RSI_PERIOD)
+    ema5_arr = compute_ema(closes, window=config.EMA_FAST)
+    ema20_arr= compute_ema(closes, window=config.EMA_SLOW)
 
-    last   = df.iloc[-1]
-    prev   = df.iloc[-2]
-
-    rsi    = last["rsi"]
-    ema5   = last["ema5"]
-    ema20  = last["ema20"]
-    price  = last["close"]
+    rsi    = rsi_arr[-1]
+    ema5   = ema5_arr[-1]
+    ema20  = ema20_arr[-1]
+    price  = closes[-1]
+    
+    prev_ema5  = ema5_arr[-2]
+    prev_ema20 = ema20_arr[-2]
 
     # EMA cross actual vs anterior
-    cross_up   = (prev["ema5"] <= prev["ema20"]) and (ema5 > ema20)
-    cross_down = (prev["ema5"] >= prev["ema20"]) and (ema5 < ema20)
+    cross_up   = (prev_ema5 <= prev_ema20) and (ema5 > ema20)
+    cross_down = (prev_ema5 >= prev_ema20) and (ema5 < ema20)
 
     signal = None
     if rsi < config.RSI_OVERSOLD and cross_up:
@@ -325,11 +353,11 @@ async def trading_loop():
         if symbol in state.positions:
             continue  # ya tenemos posición en este par
 
-        df = await fetch_klines(symbol)
-        if df is None or len(df) < 30:
+        data = await fetch_klines(symbol)
+        if data is None or len(data["close"]) < 30:
             continue
 
-        sig = compute_signals(df)
+        sig = compute_signals(data)
         logger.info(
             f"{symbol} | RSI={sig['rsi']:.1f} | EMA5={sig['ema5']:.2f} | "
             f"EMA20={sig['ema20']:.2f} | Signal={sig['signal']}"
@@ -438,19 +466,21 @@ async def backtest(ctx, symbol: str = "BTCUSDT"):
         )
 
     await ctx.send(f"🔍 Corriendo backtest en {symbol} (200 velas 1m)...")
-    df = await fetch_klines(symbol, limit=200)
-    if df is None:
+    full_data = await fetch_klines(symbol, limit=200)
+    if full_data is None:
         await ctx.send("❌ No se pudieron obtener datos.")
         return
 
+    closes = full_data["close"]
     wins = losses = 0
     total_pnl = 0.0
 
-    for i in range(30, len(df) - 1):
-        window = df.iloc[:i].copy()
+    for i in range(30, len(closes) - 1):
+        # Simular ventana deslizante
+        window = {"close": closes[:i]}
         sig = compute_signals(window)
-        entry = df.iloc[i]["close"]
-        nxt   = df.iloc[i + 1]["close"]
+        entry = closes[i]
+        nxt   = closes[i + 1]
 
         if sig["signal"] == "BUY":
             sl = entry * (1 - config.SL_PERCENT)
@@ -499,7 +529,8 @@ async def on_command_error(ctx, error):
 # ─── Main ─────────────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
-    token = os.getenv("DISCORD_TOKEN") or config.DISCORD_TOKEN
+    token = config.DISCORD_TOKEN
     if not token:
         raise ValueError("DISCORD_TOKEN no configurado en .env")
+    
     bot.run(token)
